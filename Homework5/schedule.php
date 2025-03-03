@@ -1,71 +1,58 @@
 <?php
-function generateSchedule($year, $month, &$lastWorkDay = null) {
-    $daysInMonth = date('t', strtotime("$year-$month-01"));
-    $schedule = array_fill(1, $daysInMonth, false);
-    
-    $currentDay = 1;
-    $nextWorkDay = 1;
-    
-    while ($currentDay <= $daysInMonth) {
-        $date = new DateTime("$year-$month-$currentDay");
-        $dow = $date->format('N');
-        
-        // Проверка на выходные
-        if ($dow >= 6) {
-            // Перенос на понедельник
-            $date->modify('next monday');
-            if ($date->format('n') != $month) break;
-            $currentDay = $date->format('j');
-        }
-        
-        $schedule[$currentDay] = true;
-        $lastWorkDay = $currentDay;
-        
-        // Пропускаем 2 выходных дня
-        $currentDay += 3;
-    }
-    
-    return $schedule;
-}
 
-function printCalendar($year, $month, $schedule) {
-    $monthName = date('F Y', strtotime("$year-$month-01"));
-    echo "\033[1;34m$monthName\033[0m\n";
-    
-    $daysInMonth = count($schedule);
+function generateSchedule($year, $month) {
+    $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+    $schedule = [];
+
+    $workDayCounter = 0; // Счетчик для отслеживания цикла "сутки через двое"
     for ($day = 1; $day <= $daysInMonth; $day++) {
-        $date = new DateTime("$year-$month-$day");
-        $dow = $date->format('N');
-        
-        $output = str_pad($day, 2, ' ', STR_PAD_LEFT);
-        if ($schedule[$day]) {
-            $output = "\033[32m" . $output . "\033[0m";
-        } elseif ($dow >= 6) {
-            $output = "\033[31m" . $output . "\033[0m";
+        $currentDate = new DateTime("$year-$month-$day");
+        $dayOfWeek = $currentDate->format('N'); // 1 (понедельник) - 7 (воскресенье)
+
+        // Определяем, является ли день рабочим
+        if ($workDayCounter % 3 == 0) { // Рабочий день (каждый 3-й день)
+            if ($dayOfWeek >= 6) { // Если рабочий день выпадает на выходные
+                // Переносим рабочий день на понедельник
+                $day += (8 - $dayOfWeek); // Переходим на понедельник
+                if ($day > $daysInMonth) {
+                    break; // Если вышли за пределы месяца, завершаем
+                }
+                $currentDate = new DateTime("$year-$month-$day");
+                $dayOfWeek = $currentDate->format('N');
+                $schedule[$day] = 'work'; // Рабочий день
+            } else {
+                $schedule[$day] = 'work'; // Рабочий день
+            }
+            $workDayCounter = 1; // Сбрасываем счетчик
+        } else {
+            $schedule[$day] = ($dayOfWeek >= 6) ? 'weekend' : 'off'; // Выходной или выходные
+            $workDayCounter++;
         }
-        
-        echo $output . " ";
-        if ($dow == 7) echo "\n";
     }
-    echo "\n\n";
+
+    // Вывод расписания
+    $monthName = DateTime::createFromFormat('!m', $month)->format('F');
+    echo "$monthName $year \n";
+
+    for ($day = 1; $day <= $daysInMonth; $day++) {
+        $currentDate = new DateTime("$year-$month-$day");
+        $dayOfWeek = $currentDate->format('N'); // 1 (понедельник) - 7 (воскресенье)
+
+        if (isset($schedule[$day]) && $schedule[$day] === 'work') {
+            echo "\033[32m$day\033[0m "; // Рабочий день выделен зеленым и знаком (+)
+        } elseif ($dayOfWeek >= 6) {
+            echo "\033[31m$day\033[0m "; // Суббота и воскресенье выделены красным
+        } else {
+            echo "$day "; // Обычные выходные дни
+        }
+    }
+    echo "\n";
 }
 
-$year = date('Y');
-$month = date('n');
-$monthsCount = 1;
+// Чтение данных из стандартного ввода
+echo 'Введите год: ' . PHP_EOL . '> ';
+$year = trim(fgets(STDIN));
+echo 'Введите месяц: ' . PHP_EOL . '> ';
+$month = trim(fgets(STDIN));
 
-if ($argc > 1) {
-    $year = (int)$argv[1];
-    $month = (int)$argv[2] ?? $month;
-    $monthsCount = (int)($argv[3] ?? 1);
-}
-
-$lastWorkDay = null;
-for ($i = 0; $i < $monthsCount; $i++) {
-    $currentMonth = $month + $i;
-    $currentYear = $year + intdiv($currentMonth - 1, 12);
-    $currentMonth = ($currentMonth - 1) % 12 + 1;
-    
-    $schedule = generateSchedule($currentYear, $currentMonth, $lastWorkDay);
-    printCalendar($currentYear, $currentMonth, $schedule);
-}
+generateSchedule($year, $month);
